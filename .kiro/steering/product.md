@@ -15,7 +15,7 @@ It explicitly does **not** know about Home Assistant, UI, or any specific transp
 
 ## Sibling Repos
 
-- `esphome-lumagen` — ESPHome firmware that exposes the Lumagen's RS-232 port over the network as a `serial_proxy` (via a MAX3232 level shifter). `aiolumagen` is one possible client of that proxy.
+- `esphome-lumagen` — ESPHome firmware that exposes the Lumagen's serial port over the network as a `serial_proxy`. The ESP32-S3 is a USB host driving the FT232R inside the Lumagen (its rear USB-B port), so no level shifter is involved. `aiolumagen` is one possible client of that proxy.
 - `ha-lumagen` — Home Assistant custom integration. Thin wrapper over this library; owns config flow, coordinator, and entities.
 
 ## Design Goals

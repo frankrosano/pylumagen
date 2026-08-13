@@ -13,7 +13,7 @@ esphome-lumagen   →   aiolumagen   →   ha-lumagen
 
 - **`aiolumagen` has zero `homeassistant` imports.** Not in tests, not in helpers, not anywhere. HA-shaped concerns surface via documented `LumagenError` subclasses; the integration translates them.
 - **`ha-lumagen` has zero protocol parsing.** No `!` scans, no `ZQ` formatting, no CSV splits in `coordinator.py`/`button.py`/etc. If you'd need to read `Tip0011` to write a line of code in this repo, that line belongs in `aiolumagen`.
-- **`esphome-lumagen` has zero Lumagen-specific logic.** It's a serial bridge. The baud rate (9600 8N1) and the RS-232 UART pin wiring (`tx_pin`/`rx_pin`) are the only Lumagen-aware values in the YAML — everything else (commands, responses, state) is `aiolumagen`'s job.
+- **`esphome-lumagen` has zero Lumagen-specific logic.** It's a serial bridge. The only Lumagen-aware values in the YAML are the startup baud rate (9600 8N1) and the FT232R's VID/PID (implied by `type: ft232`) — everything else (commands, responses, state) is `aiolumagen`'s job. Its `buffer_size` / `flush_timeout` settings are tuned for bulk firmware transfer, which is flow control rather than protocol, so the boundary still holds.
 
 If you violate one of these, stop and move the code.
 
@@ -45,7 +45,7 @@ Don't introduce dead API in `aiolumagen` "for `ha-lumagen` to consume later." Sh
 | State stops updating; reconnect storm | `aiolumagen` (`client.py`) |
 | Entity shows wrong icon / device class / unit | `ha-lumagen` |
 | Config flow can't find the serial port | `ha-lumagen` (or HA's `usb` integration upstream) |
-| Bytes never reach the Lumagen / no serial response (TX/RX crossover) | `esphome-lumagen` |
+| Bytes never reach the Lumagen / no serial response | `esphome-lumagen` — check USB enumeration, and its log for `Output pool full` |
 | Connection drops over the network | usually `serialx` (upstream); occasionally `esphome-lumagen` (Ethernet) |
 
 ## Testing Strategy (per repo)
