@@ -31,4 +31,4 @@ Located at `../lumagen-research/` from this repo:
 - **Cite Tip0011 sections in code comments** where a parser decision depends on it (`# Tip0011 §3.4: ZQS01 returns...`). Do not paste long verbatim quotes.
 - **`lumagen-research` is private and must stay that way.** This repo is public — never copy a PDF, firmware blob, vendor EXE or capture into it. Reference by filename only, which is what the docstrings in `commands.py` and `client.py` do.
 - **PDFs aren't directly readable** by the agent. If a passage is needed, ask for a `pdftotext` extract and paste it into the conversation.
-- The richer references doc, with file-by-file detail on the firmware tooling, lives in the sibling repo at `../esphome-lumagen/.kiro/steering/references.md`.
+- The file-by-file inventory, with the rules for handling this material, lives in the research repo itself at `../lumagen-research/.kiro/steering/references.md`.
