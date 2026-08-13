@@ -1,7 +1,7 @@
 """LumagenProtocol unit tests.
 
 These exercise the parser against the exact response shapes documented in
-``References/Tip0011_RS232CommandInterface_111023.pdf``. When changing the
+``lumagen-research/Tip0011_RS232CommandInterface_111023.pdf``. When changing the
 protocol code, update these first.
 """
 

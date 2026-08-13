@@ -827,8 +827,8 @@ class LumagenClient:
         :func:`~aiolumagen.commands.fan_speed_command` for the evidence.
 
         Reverse-engineered from the firmware (see
-        ``References/FIRMWARE_REVERSE_ENGINEERING_FINDINGS.md``); not
-        documented in the bundled Tip0011 PDF.
+        ``lumagen-research/FIRMWARE_REVERSE_ENGINEERING_FINDINGS.md``); not
+        documented in the Tip0011 PDF.
 
         **Write-only, permanently.** There is no fan-speed query, and this
         is settled rather than merely undocumented: it's absent from
@@ -929,9 +929,9 @@ class LumagenClient:
     async def _send_startup_sequence(self) -> None:
         """ZE2 echo-off, then initial queries with retry.
 
-        Two attempts at 1.5 seconds apart is plenty of headroom — the
-        RS-232 link carries no enumeration step, so once the transport is
-        connected the first attempt almost always succeeds. The retry only
+        Two attempts at 1.5 seconds apart is plenty of headroom — once
+        serialx reports the transport connected the link is just a byte
+        pipe, so the first attempt almost always succeeds. The retry only
         matters when we attach while the ESPHome bridge is still coming up,
         which is rare in practice because ha-lumagen's coordinator setup
         waits for the esphome integration first.
@@ -1074,12 +1074,13 @@ class LumagenClient:
         is functionally identical to reloading the integration from the
         ESP's perspective, without the entity churn.
 
-        Caveat on the evidence: this was diagnosed on the retired USB/FTDI
-        bridge, where a cable hot-plug reliably reproduced it. It has not
-        been reproduced on the current RS-232 path, which has no
-        enumeration step to lose. The recovery is cheap and idempotent so
-        it stays, but treat the trigger as unverified for this hardware —
-        don't cite it as established behavior for RS-232.
+        Caveat on the evidence: this was diagnosed on a USB/FTDI bridge,
+        where a cable hot-plug reliably reproduced it. That is once again
+        the live path — ``esphome-lumagen`` moved to RS-232 and then back
+        to USB host driving the Lumagen's own FT232R — so the trigger is
+        realistic rather than hypothetical, though it has not been
+        re-confirmed since the switch back. The recovery is cheap and
+        idempotent, so it stays.
         """
         p_iv = self._power_poll_interval
         s_iv = self._status_poll_interval

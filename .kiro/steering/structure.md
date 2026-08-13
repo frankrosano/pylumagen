@@ -62,6 +62,6 @@ If you find yourself adding `await` to `protocol.py` or string parsing to `trans
 | Background poll cadence, handshake order | `client.py` |
 | serialx URL handling | `transport.py` |
 | HA entities, config flow, coordinator | `ha-lumagen` (downstream) |
-| RS-232 bridge firmware (UART → serial_proxy) | `esphome-lumagen` (downstream) |
+| Serial bridge firmware (USB host → serial_proxy) | `esphome-lumagen` (downstream) |
 
 When something feels like it could go in either `protocol` or `client`: if it can be expressed as "given these bytes, what's the new state?", it belongs in `protocol`. Otherwise it's `client`.

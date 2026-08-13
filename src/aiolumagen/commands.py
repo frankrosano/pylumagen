@@ -3,7 +3,7 @@
 The Lumagen speaks short ASCII commands over 9600 8N1. Most commands are a
 single character with no terminator; a handful are documented to need a
 carriage return. The constants in this module mirror the command tables in
-``References/Tip0011_RS232CommandInterface_111023.pdf``.
+``lumagen-research/Tip0011_RS232CommandInterface_111023.pdf``.
 
 **This module is the single source of truth for Lumagen wire commands.**
 Consumers — including ``ha-lumagen``'s button/select/switch/remote tables —
@@ -270,8 +270,8 @@ def fan_speed_command(speed: int) -> str:
     digit is one lower. Confirmed empirically: sending ``ZY5524`` makes
     the device report a minimum fan speed of 5, and ``ZY5523`` reports 4.
     So the documented ``X=0-9`` range (from
-    ``References/FIRMWARE_REVERSE_ENGINEERING_FINDINGS.md`` — this command
-    isn't in the bundled Tip0011 PDF at all) is a 0-based index into a
+    ``lumagen-research/FIRMWARE_REVERSE_ENGINEERING_FINDINGS.md`` — this
+    command isn't in the Tip0011 PDF at all) is a 0-based index into a
     1-based display. Callers work in the device's units and this encoder
     owns the conversion, so there's only one notion of "fan speed" in the
     library.

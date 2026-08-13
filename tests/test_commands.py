@@ -2,7 +2,7 @@
 
 Wire encodings only — no transport, no client. Where a builder's output is
 non-obvious the test cites the line in
-``References/Tip0011_RS232CommandInterface_111023.pdf`` it comes from.
+``lumagen-research/Tip0011_RS232CommandInterface_111023.pdf`` it comes from.
 """
 
 from __future__ import annotations

@@ -1,7 +1,7 @@
 """Command-builder tests for OSD messaging, labels, hotplug and config.
 
 Wire encodings only. Where an encoding is non-obvious the test cites the
-``References/Tip0011_RS232CommandInterface_111023.pdf`` entry it comes from,
+``lumagen-research/Tip0011_RS232CommandInterface_111023.pdf`` entry it comes from,
 because most of these are opaque single characters or fixed-width fields where
 an off-by-one is invisible in the output.
 """
