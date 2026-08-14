@@ -1,4 +1,19 @@
-"""aiolumagen — async Python library for the Lumagen Radiance Pro RS-232 protocol."""
+"""aiolumagen — async Python library for the Lumagen Radiance Pro RS-232 protocol.
+
+The names re-exported here are the API contract; renaming or removing one is a
+breaking change.
+
+Firmware updating lives in :mod:`aiolumagen.firmware` and is deliberately *not*
+flattened into this namespace. It speaks a different protocol from everything
+here, it is the only part of the library that can leave a device unbootable, and
+most consumers never touch it — so importing it should be an explicit act::
+
+    from aiolumagen.firmware import update_firmware
+
+Its exceptions are the exception, so to speak: they're re-exported below, because
+a caller has to be able to catch them without importing the subsystem that raises
+them.
+"""
 
 from __future__ import annotations
 
@@ -19,6 +34,9 @@ from aiolumagen.exceptions import (
     LumagenCommandError,
     LumagenConnectionError,
     LumagenError,
+    LumagenFirmwareAbortError,
+    LumagenFirmwareError,
+    LumagenFirmwareImageError,
 )
 from aiolumagen.formatting import (
     decode_aspect_ratio,
@@ -57,6 +75,9 @@ __all__ = [
     "LumagenCommandError",
     "LumagenConnectionError",
     "LumagenError",
+    "LumagenFirmwareAbortError",
+    "LumagenFirmwareError",
+    "LumagenFirmwareImageError",
     "LumagenState",
     "LumagenTransport",
     "Memory",
@@ -72,4 +93,4 @@ __all__ = [
     "derive_horizontal_resolution",
 ]
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"

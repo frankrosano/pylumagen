@@ -22,6 +22,19 @@ If you violate one of these, stop and move the code.
 - **`aiolumagen.__init__`'s `__all__` is the public surface.** Anything re-exported is a contract with `ha-lumagen`. Renaming or removing one is a breaking change and needs a coordinated PR.
 - **`LumagenState` field shape is part of the contract.** Adding fields is non-breaking (defaults to `None`). Renaming or retyping a field requires matching changes in `ha-lumagen`'s entities and translations.
 - **Enum values are part of the contract.** `Colorspace.REC_709`, `HdrStatus.HDR10`, etc. — `ha-lumagen` may match against them by identity.
+- **`aiolumagen.firmware.__all__` is a second, separate contract.** It is *not* flattened into the package root, so `ha-lumagen` imports it explicitly. Its three exceptions are the exception — they *are* re-exported from the root, so a consumer can catch them without importing the subsystem that raises them.
+
+## Firmware Updating Spans All Three Repos
+
+The protocol lives entirely in `aiolumagen`, but the capability has obligations at both ends.
+
+- **`aiolumagen` owns everything protocol-shaped**: EXE parsing, the flash map, which sections need writing, erase/write/verify/promote, audit and repair. `plan_update()` is pure, so a plan can be computed and displayed before anything is committed.
+- **`ha-lumagen` owns the user-facing half**: an `update` entity whose availability comes from `plan_update()`, progress from the `UpdateProgress` callback, and the decision to offer an update at all. Two hard requirements:
+  - **Unload the coordinator first.** `serial_proxy` serves one subscriber at a time, so a live `LumagenClient` on the same bridge blocks a firmware session.
+  - **Percent-encode the PSK** when building the URL. ESPHome noise keys are base64 and routinely contain `+`, which a query string decodes as a space — corrupting the key while preserving its length, and surfacing as aioesphomeapi's misleading `Malformed PSK (length=44)`.
+- **`esphome-lumagen` owns the transport's fitness for bulk transfer.** Its `buffer_size: 8192` and `flush_timeout: 1s` are load-bearing: the pool sizing is what the 4096-byte chunk cap is derived from, and the 1 s flush budget is why a block at 230400 drains in one round trip instead of driving the barrier's retry loop on every block. Changing either affects `aiolumagen`'s behaviour without changing a line of its code.
+
+**A successful firmware update powers the unit off.** That is the device's own behaviour (`Z97` is how newly written firmware loads), so `ha-lumagen` must present it as expected rather than as a failure, and must not treat the subsequent unavailability as an error.
 
 ## Change Ordering
 

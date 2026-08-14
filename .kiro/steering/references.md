@@ -22,8 +22,8 @@ Located at `../lumagen-research/` from this repo:
 | `FIRMWARE_REVERSE_ENGINEERING_FINDINGS.md` | Firmware-strings RE notes. Source for the undocumented commands this library does implement — the `ZY552X` fan-speed setter among them. **Partly wrong on the firmware wire format** (it claims Motorola S-records); see `FIRMWARE_UPDATE_PROTOCOL.md` Part V.A. |
 | `crestron-driver/` | Crestron sample modules (mostly binary). Behavioral oracle for cross-checking command strings and parsing. |
 | `Pronto/Lumagen_Pronto_Codes.db` | Pronto IR code database. Discrete-IR equivalents of OSD/aspect/memory commands. |
-| `FIRMWARE_UPDATE_PROTOCOL.md` + `lumagen_stage.py` etc. | The firmware-update (bootloader) protocol and its working flasher. **Not implemented in `aiolumagen` today.** Part III.4 of that doc sketches the port into `aiolumagen/bootloader/`; until then this library speaks only the normal control protocol. |
-| `radiance_pro<MMDDYY>/` | Vendor updater EXEs, one per release. Source of the firmware images. Not consumed by `aiolumagen`. |
+| `FIRMWARE_UPDATE_PROTOCOL.md` + `lumagen_stage.py` etc. | The firmware-update protocol and the proof-of-concept flasher, **now ported** into `aiolumagen/firmware/`. Still the reference for *why* each constant is what it is — Part II for the flush barrier, Part III.5 for the protocol nuances, Part IV for the command and flash-map reference. Note its Part III.4 proposes the package name `bootloader/`; we ship it as `firmware/`, because "bootloader" in this protocol means the boot sector at `0x0` and the device mode the session explicitly *refuses*. |
+| `radiance_pro<MMDDYY>/` | Vendor updater EXEs, one per release. Source of the firmware images, and what `firmware/extract.py` parses. Used to validate the extractor locally — **never copied into this repo.** |
 
 ## Rules
 

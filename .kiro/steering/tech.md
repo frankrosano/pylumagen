@@ -134,7 +134,62 @@ uv run python examples/via_url.py 'esphome://10.0.0.42:6053/?port_name=Lumagen&k
 |---|---|
 | `LumagenConnectionError` | `ConfigEntryNotReady`, or device unavailable from the coordinator |
 | `LumagenCommandError` | Log a warning; don't surface to the user. Also subclasses `ValueError` |
+| `LumagenFirmwareImageError` | Bad input file; no device was contacted. Also subclasses `ValueError` |
+| `LumagenFirmwareAbortError` | Update refused or stopped **before touching live firmware**. Tell the user nothing changed and offer a retry |
+| `LumagenFirmwareError` | Base of the two above; also what an unconfirmable outcome raises. Surface the message |
 
 There is no `LumagenAuthError` — the Lumagen has no auth. Transport-layer auth failures (e.g. wrong ESPHome PSK) surface as `LumagenConnectionError` via serialx.
 
-There is no timeout exception either. Nothing in the library is request/response, so there's no outstanding request a deadline could apply to; consumers impose their own with `asyncio.timeout` and catch the builtin `TimeoutError`. Don't re-add one unless the library grows a real `wait_for_state` waiter.
+There is no timeout exception either. Nothing in the *client* is request/response, so there's no outstanding request a deadline could apply to; consumers impose their own with `asyncio.timeout` and catch the builtin `TimeoutError`. Don't re-add one unless the library grows a real `wait_for_state` waiter.
+
+`aiolumagen.firmware` is the one documented exception and does **not** change that rule. A firmware session genuinely is request/response, so its deadlines surface as `LumagenFirmwareError` naming what was awaited, rather than as a general timeout exception only one subsystem could raise.
+
+The three firmware exceptions are re-exported from the package root even though the rest of the firmware API is not, so a consumer can catch them without importing the subsystem that raises them.
+
+## Firmware Updating
+
+`aiolumagen.firmware` implements the vendor's firmware-update protocol — `M0931`, baud renegotiation, 4096-byte block writes, erase/verify/promote. Ported from the hardware-validated proof-of-concept in the private `lumagen-research` repo, whose `FIRMWARE_UPDATE_PROTOCOL.md` remains the reference for *why* each constant is what it is.
+
+- **No new runtime dependencies.** PE parsing is hand-rolled rather than taking `pefile`, because `ha-lumagen` would inherit that dependency into every HA install for one optional feature.
+- **Vendor EXEs, USB captures and PDFs stay in `lumagen-research`.** They're Lumagen, Inc.'s copyright and this repo is public. Tests build a synthetic PE instead; the extractor is cross-checked against the real releases outside the suite.
+- **Chip images (`hdmi_rx`/`tx`/`ntx`) are extracted but never written.** Beyond "no observed vendor session writes them in Auto mode": they were **byte-identical across every release sampled** (five of them), so nothing was available to test a write path against. Don't add one speculatively — it would ship untestable code on the one path that can brick an HDMI board. Note this is a limit of the sample: Lumagen publishes far more releases than were examined, and a bundle that changes a chip image may exist. If one turns up, that is the trigger to reconsider — with a real diff to validate against.
+- **The bootloader is never written, and that is a recovery guarantee, not an omission.** Flash `0x0`–`0x20000` is untouched on every path (`section0` is written with its first sector stripped for exactly this reason), which is what keeps the vendor's updater viable as a recovery route. Bootloader mode (`H0` → `Ok`) is also *refused* at preflight rather than supported: that path uses a different block size, is unverified, and is brick-capable.
+- **Only the Radiance Pro is accepted.** `plan_update()` refuses any device not reporting id `0x16`; an updater's images are not valid for a different model. The one unit ever tested is a Pro 4242. Don't relax this gate to "probably fine".
+- The transfer timings in `firmware/protocol.py` are measured, not guessed. See the invariants list in `structure.md` before changing any of them.
+
+### Testing it on hardware
+
+`examples/update_firmware.py` is the harness, and its module docstring holds the
+escalation order. The rules the research campaign settled on, which still apply:
+
+- **Qualify on scratch, never on section 1.** `--only section0 --no-promote` runs
+  the entire erase/write/verify path with live firmware untouched, so a failure
+  costs a retry. Repeat it; don't treat one pass as evidence.
+- **Change one variable at a time.** A `--header-last` test once failed at 115200
+  and passed immediately at 57600, confounding "is the idea sound?" with "is this
+  rate sound?".
+- **Escalate block count, not just rate.** Section 0 is ~112 blocks, section 1 is
+  772. A marginal setting passes the first and fails the second. This is the
+  escalation that matters, and it is what the qualification campaign actually did
+  — the rate walk was deliberately skipped as the weaker test.
+- **Only 230400 is qualified.** It is the vendor's own rate and the one the flush
+  barrier was designed for, and it held with zero retries across ~1,900 blocks.
+  9600 / 57600 / 115200 are accepted by `SUPPORTED_BAUDS` but untested here.
+  Historical note if you ever need a lower rate: 115200 is the worst of the three
+  — it was once called qualified off a single clean run and later failed ~1 in 4.
+- **`flush_timeout: 1s` on the bridge is why the retry path never fires.** A
+  4096-byte block at 230400 is 177.8 ms of wire time, which drains inside that
+  budget, so the ESP answers `OK` rather than `TIMEOUT`. On a bridge left at the
+  100 ms default the retry loop becomes the *normal* path on every block. So a
+  zero-retry result is evidence about the firmware config, not just the link.
+- **Verify by a second, independent mechanism.** A whole-region `CS=` is one
+  32-bit sum over megabytes; `--audit` checks each block separately and says
+  *where* the damage is. Both agreeing is meaningfully stronger than either alone.
+- Run `--status` before and after each test: it shows both A/B slot headers and
+  generations, which is how you confirm what actually changed.
+- `--audit` is read-only and safe against a half-written region — run it *before*
+  retrying, because the next attempt destroys the evidence. `--repair` then
+  rewrites only the affected sectors instead of re-rolling the whole transfer.
+- `--resync` recovers a desynced device without a power cycle. Desync is *the*
+  documented failure mode — the protocol has no framing and the device has no
+  inter-byte timeout, so one lost byte leaves it consuming commands as payload.
