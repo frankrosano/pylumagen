@@ -88,14 +88,22 @@ class SubtitleShift(StrEnum):
 class AutoAspectStatus(StrEnum):
     """Auto-aspect state, from the trailing ``!I25`` field at payload 26.
 
-    Richer than the boolean :attr:`LumagenState.auto_aspect` (which comes from
-    ``ZQI54``): the device distinguishes "off" from "disabled", where the
-    latter means auto-aspect is configured but currently inhibited.
+    Confirmed on hardware (Radiance Pro 4242, firmware 030326) and now the
+    source for :attr:`LumagenState.auto_aspect`, which lands immediately from
+    the push rather than waiting for a ``ZQI54`` poll.
 
-    Carries the same empirical caveat as :class:`SubtitleShift` — see that
-    docstring. Because this field is unverified it deliberately does **not**
-    feed :attr:`LumagenState.auto_aspect`, which stays sourced from the
-    documented ``ZQI54`` query.
+    Despite the three names, this is **not** richer than the boolean in
+    practice. ``DISABLED`` was measured against ``ZQI54`` under three
+    independent ways of switching auto aspect off — the serial ``V`` command,
+    the OSD menu, and subtitle-shift inhibition — and all three report
+    ``DISABLED`` here with ``0`` from ``ZQI54``. So ``DISABLED`` does not
+    separate "configured off" from "configured on but inhibited". ``OFF`` has
+    never been observed at all, not even with no source locked, which still
+    reports ``ON`` while auto aspect is enabled.
+
+    Consequence for consumers: do not present ``DISABLED`` as enabled. A UI
+    toggle driven that way would read "on" immediately after the user switched
+    auto aspect off.
     """
 
     OFF = "Off"
@@ -299,14 +307,15 @@ class LumagenState:
     Kept for cross-checking against :attr:`output_resolution`, which carries
     the same number via the status push."""
 
-    # --- Full v5 trailing fields, empirically mapped ---
+    # --- Full v5 trailing fields ---
     subtitle_shift: SubtitleShift | None = None
-    """Payload index 25. See :class:`SubtitleShift` for the caveat — absent on
-    firmware ``030225`` and unverified anywhere."""
+    """Payload index 25. Confirmed on hardware; stays ``None`` on firmware whose
+    payload stops earlier, such as ``030225``."""
 
     auto_aspect_status: AutoAspectStatus | None = None
-    """Payload index 26. See :class:`AutoAspectStatus`. Deliberately does not
-    feed :attr:`auto_aspect`, which stays sourced from ``ZQI54``."""
+    """Payload index 26. Confirmed on hardware, and the source for
+    :attr:`auto_aspect`. See :class:`AutoAspectStatus` — despite having three
+    names it carries no more information than the boolean."""
 
     # --- Output mode (from !O01) ---
     output_mode_raw: str | None = None
@@ -321,8 +330,14 @@ class LumagenState:
     # --- Game mode (from !I53 / ZY551) ---
     game_mode: bool | None = None
 
-    # --- Auto aspect (from !I54) ---
+    # --- Auto aspect (from !I25 index 26, or !I54 on older firmware) ---
     auto_aspect: bool | None = None
+    """Whether automatic aspect detection is active.
+
+    Sourced from :attr:`auto_aspect_status` (``!I25`` payload index 26), which
+    rides the Full v5 push and therefore updates the moment auto aspect changes.
+    ``ZQI54`` is only queried as a fallback on firmware whose payload stops
+    before index 26."""
 
     # --- HDR — source mastering metadata (from !I52) ---
     # Populated only when V=1 (source is actually HDR). For SDR sources

@@ -54,11 +54,65 @@ async def test_startup_queries_non_pushed_secondary_state(
     existed but nothing ever sent the query, so the only authoritative output
     width never arrived and output_width fell back to an aspect-derived value
     that is wrong on a scaled output.
+
+    ZQI54 is deliberately NOT in this list — it is now conditional on the push
+    lacking index 26. Both branches are covered by the two tests below.
     """
     await client.start()
     sent = b"".join(fake_transport.sent)
-    for query in (b"ZQI30", b"ZQI53", b"ZQI54", b"ZQI50", b"ZQI52", b"ZQO01"):
+    for query in (b"ZQI30", b"ZQI53", b"ZQI50", b"ZQI52", b"ZQO01"):
         assert query in sent, f"{query!r} not issued at startup: {fake_transport.sent}"
+
+
+# A full v5 status line, 27 fields, index 26 = 2 (auto aspect on).
+_I25_WITH_INDEX_26 = (
+    b"!I25,1,059,2160,0,0,178,178,-,0,000e,0,0,059,2160,237,2,0,p,P,01,01,178,178,A,1,0,2\r\n"
+)
+# The same line truncated to the v4 layout — no index 25 or 26.
+_I25_WITHOUT_INDEX_26 = (
+    b"!I25,1,059,2160,0,0,178,178,-,0,000e,0,0,059,2160,237,2,0,p,P,01,01,178,178,A,1\r\n"
+)
+
+
+async def test_zqi54_not_polled_once_the_push_carries_auto_aspect(
+    fake_transport: FakeTransport, client: LumagenClient
+) -> None:
+    """Auto aspect rides the !I25 push, so polling ZQI54 is redundant and slower.
+
+    The device pushes !I25 on every auto-aspect change (verified on hardware with
+    no query outstanding), and index 26 is confirmed against ZQI54 under three
+    independent ways of switching it off. So once the push has proven it carries
+    index 26, the query stops going out.
+    """
+    await client.start()
+    fake_transport.feed(_I25_WITH_INDEX_26)
+    assert client.state.auto_aspect_status is not None
+    assert client.state.auto_aspect is True
+
+    fake_transport.sent.clear()
+    await client._query_secondary_status()
+    sent = b"".join(fake_transport.sent)
+    assert b"ZQI54" not in sent, f"ZQI54 polled despite the push carrying it: {fake_transport.sent}"
+    assert b"ZQI30" in sent, "the genuinely non-pushed queries must still go out"
+
+
+async def test_zqi54_still_polled_when_the_push_lacks_index_26(
+    fake_transport: FakeTransport, client: LumagenClient
+) -> None:
+    """Older firmware stops the payload early; it must not lose auto aspect.
+
+    The recorded 030225 capture ends at index 24, so there the push cannot supply
+    auto aspect and ZQI54 remains the only source.
+    """
+    await client.start()
+    fake_transport.feed(_I25_WITHOUT_INDEX_26)
+    assert client.state.auto_aspect_status is None
+
+    fake_transport.sent.clear()
+    await client._query_secondary_status()
+    assert b"ZQI54" in b"".join(fake_transport.sent), (
+        f"ZQI54 must still be polled without index 26: {fake_transport.sent}"
+    )
 
 
 async def test_status_poll_queries_secondary_state_when_powered_on(

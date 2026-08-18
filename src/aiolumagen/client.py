@@ -565,15 +565,25 @@ class LumagenClient:
     async def _query_secondary_status(self) -> None:
         """Query the state the Full v5 push stream doesn't carry.
 
-        Sharpness (``!I30``), game mode (``!I53``), auto aspect (``!I54``),
-        display Rec.2020 support (``!I50``), source HDR mastering
-        metadata (``!I52``) and output mode (``!O01``) are only emitted in
-        response to their explicit ``ZQ`` queries — none of them ride in the
-        ``!I25`` status push.
+        Sharpness (``!I30``), game mode (``!I53``), display Rec.2020 support
+        (``!I50``), source HDR mastering metadata (``!I52``) and output mode
+        (``!O01``) are only emitted in response to their explicit ``ZQ``
+        queries — none of them ride in the ``!I25`` status push.
 
         ``!O01`` is here because it carries the only authoritative output width;
         the status push offers height and an aspect code, from which width can
         only be inferred, and that inference breaks on a scaled output.
+
+        **Auto aspect is the exception, and is no longer polled unconditionally.**
+        Payload index 26 of the ``!I25`` push carries it, the device pushes on
+        every auto-aspect change, and the mapping is confirmed on hardware — so
+        ``ZQI54`` is redundant and slower. It is kept only as a fallback for
+        firmware that stops the payload before index 26 (the recorded ``030225``
+        capture ends at 24), detected by
+        :attr:`~aiolumagen.state.LumagenState.auto_aspect_status` still being
+        ``None`` after the handshake has already issued ``ZQI25``. On current
+        firmware that check is false forever after the first status line, so the
+        query never goes out.
 
         One partial exception, which is why this list still includes auto
         aspect: a *tri-state* auto-aspect field appears to ride the push at
@@ -599,7 +609,9 @@ class LumagenClient:
         try:
             await self.query_sharpness()
             await self.query_game_mode()
-            await self.query_auto_aspect()
+            if self.state.auto_aspect_status is None:
+                # Firmware too old to carry index 26 — fall back to the query.
+                await self.query_auto_aspect()
             await self.query_display_rec2020()
             await self.query_source_hdr_status()
             await self.query_output_mode()

@@ -635,23 +635,59 @@ def test_i25_auto_aspect_status_distinguishes_off_from_disabled() -> None:
     assert updates[-1][0].auto_aspect_status is AutoAspectStatus.ON
 
 
-def test_i25_auto_aspect_status_does_not_touch_the_zqi54_boolean() -> None:
-    """The unverified push index must not overwrite the documented query's field.
+def test_i25_index_26_feeds_the_auto_aspect_boolean() -> None:
+    """Index 26 drives ``auto_aspect``, so a change lands without a ZQI54 poll.
 
-    ``auto_aspect`` stays sourced from ZQI54 so a wrong guess at index 26 can
-    only add an unknown field, never corrupt one consumers already use.
+    Replaces an earlier test that asserted the opposite. Index 26 was kept away
+    from the boolean while its mapping was a guess; it has since been confirmed
+    on hardware against three independent ways of switching auto aspect off
+    (serial ``V``, the OSD menu, and subtitle-shift inhibition), each agreeing
+    with ZQI54. The device also pushes !I25 on every auto-aspect change, so the
+    push is both sufficient and faster than polling.
+    """
+    from aiolumagen.state import AutoAspectStatus
+
+    updates, proto = _collect()
+    base = (
+        "!I25,1,059,2160,0,0,178,178,-,0,000e,0,0,059,2160,237,2,0,p,P,01,01,178,178,A,1,0,{}\r\n"
+    )
+
+    proto.feed_bytes(base.format("2").encode("ascii"))
+    state = updates[-1][0]
+    assert state.auto_aspect_status is AutoAspectStatus.ON
+    assert state.auto_aspect is True
+
+    # DISABLED must read as False. Measured: a deliberate off and an inhibited
+    # on both report DISABLED, so presenting it as enabled would show auto
+    # aspect on immediately after the user switched it off.
+    proto.feed_bytes(base.format("1").encode("ascii"))
+    state = updates[-1][0]
+    assert state.auto_aspect_status is AutoAspectStatus.DISABLED
+    assert state.auto_aspect is False
+
+    proto.feed_bytes(base.format("0").encode("ascii"))
+    state = updates[-1][0]
+    assert state.auto_aspect_status is AutoAspectStatus.OFF
+    assert state.auto_aspect is False
+
+
+def test_i25_without_index_26_leaves_zqi54_boolean_intact() -> None:
+    """Firmware that stops the payload early must not have its value wiped.
+
+    The 030225 capture ends at index 24. On such firmware ZQI54 is still polled,
+    and a shorter push must leave what it established alone.
     """
     updates, proto = _collect()
-    proto.feed_bytes(b"!I54,1\r\n")  # ZQI54 says auto aspect is on
+    proto.feed_bytes(b"!I54,1\r\n")
     assert updates[-1][0].auto_aspect is True
 
-    # A push claiming "off" at index 26 updates only the status enum.
+    # v4-length payload: no index 25 or 26.
     proto.feed_bytes(
-        b"!I25,1,059,2160,0,0,178,178,-,0,000e,0,0,059,2160,237,2,0,p,P,01,01,178,178,A,1,0,0\r\n"
+        b"!I25,1,059,2160,0,0,178,178,-,0,000e,0,0,059,2160,237,2,0,p,P,01,01,178,178,A,1\r\n"
     )
-    state, _ = updates[-1]
-    assert state.auto_aspect is True  # untouched
-    assert state.auto_aspect_status is not None  # but the enum landed
+    state = updates[-1][0]
+    assert state.auto_aspect is True
+    assert state.auto_aspect_status is None
 
 
 def test_i25_malformed_extended_fields_do_not_erase_good_state() -> None:

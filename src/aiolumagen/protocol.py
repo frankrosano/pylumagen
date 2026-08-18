@@ -37,8 +37,8 @@ fields:
 
 * index 23 — active input memory letter (``A``/``B``/``C``/``D``)
 * index 24 — power state (``0``/``1``)
-* index 25 — subtitle shift status (``0`` off, ``1`` 3%, ``2`` 6%) *(empirical)*
-* index 26 — auto aspect status (``0`` off, ``1`` disabled, ``2`` on) *(empirical)*
+* index 25 — subtitle shift status (``0`` off, ``1`` 3%, ``2`` 6%)
+* index 26 — auto aspect status (``0`` off, ``1`` disabled, ``2`` on)
 
 Indices 23 and 24 were previously only obtainable via separate ``ZQI00`` and
 ``ZQS02`` queries; v5 pushes them on every state change so power transitions
@@ -46,20 +46,29 @@ and memory swaps reach listeners in real time without a follow-up poll.
 
 **On the evidence for 25 and 26.** ``ZQI25`` is absent from
 ``Tip0011_RS232CommandInterface_111023.pdf`` entirely — Full v5 postdates that
-revision, so every index above 22 here is empirical. 23 and 24 are confirmed
-by captures in ``tests/test_protocol.py``. 25 and 26 are **not** confirmed
-here and should be read as a hypothesis: the recorded capture from firmware
-``030225`` ends at index 24, and the firmware installer is compressed so its
-format strings aren't readable either. Both reads are length-guarded, so on
-that firmware the fields stay ``None`` and nothing changes. Tip0011's own
-advice for this layout — "allow for future comma delimited fields being added
-at the end of the response" — is why a newer firmware having grown two more
-fields is the likeliest explanation.
+revision, so every index above 22 is undocumented. All four are now confirmed
+on hardware (Radiance Pro 4242, firmware 030326):
 
-Because index 26 is unverified it populates
-:attr:`~aiolumagen.state.LumagenState.auto_aspect_status` only; the boolean
-:attr:`~aiolumagen.state.LumagenState.auto_aspect` stays sourced from the
-documented ``ZQI54`` query so a wrong guess can't corrupt it.
+* 23 and 24 by the captures in ``tests/test_protocol.py``.
+* 25 by driving ``ZY5530``/``ZY5531``/``ZY5532`` and reading the field back —
+  it tracked ``0``/``1``/``2`` exactly, in both directions.
+* 26 by switching auto aspect three different ways — the serial ``V`` command,
+  the OSD menu, and subtitle-shift inhibition — each agreeing with ``ZQI54``.
+
+Both reads stay length-guarded, because a firmware that stops the payload
+earlier is still supported: the recorded ``030225`` capture ends at index 24, so
+there the fields stay ``None`` and nothing changes. Tip0011's own advice for
+this layout — "allow for future comma delimited fields being added at the end of
+the response" — is why a newer firmware having grown two more fields was the
+likeliest explanation, and it held.
+
+Index 26 now also feeds the boolean
+:attr:`~aiolumagen.state.LumagenState.auto_aspect`, which is why ``ZQI54`` is no
+longer polled unconditionally — see
+:meth:`~aiolumagen.client.LumagenClient._query_secondary_status`. The device
+pushes ``!I25`` on every auto-aspect change (verified with no query
+outstanding), so the push is both sufficient and faster. ``ZQI54`` remains as
+the fallback for firmware without index 26.
 """
 
 from __future__ import annotations
@@ -755,12 +764,19 @@ class LumagenProtocol:
         if len(fields) > _I25_AUTO_ASPECT:
             auto = _AUTO_ASPECT_MAP.get(fields[_I25_AUTO_ASPECT])
             if auto is not None:
-                # Note: deliberately does NOT set state.auto_aspect. That
-                # boolean stays sourced from the documented ZQI54 query so an
-                # unverified index can't corrupt a field consumers already
-                # rely on. Once this mapping is confirmed on hardware,
-                # folding the two together is a one-line change here.
                 state.auto_aspect_status = auto
+                # Also feed the boolean. This index was previously kept away
+                # from it in case the mapping was wrong; it has since been
+                # confirmed on hardware (4242 / firmware 030326) against three
+                # independent ways of switching auto aspect off — the serial
+                # 'V' command, the OSD menu, and subtitle-shift inhibition —
+                # all reporting DISABLED here and 0 from ZQI54.
+                #
+                # The gain is latency, not information: this rides the push, so
+                # a change lands immediately instead of waiting for the next
+                # ZQI54 poll. The device pushes !I25 on every auto-aspect
+                # change, verified by listening with no query outstanding.
+                state.auto_aspect = auto is AutoAspectStatus.ON
 
     @staticmethod
     def _apply_i2x(data: str, state: LumagenState) -> None:
