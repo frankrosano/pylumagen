@@ -582,12 +582,38 @@ def input_restart_command(input_number: int | str = "all") -> str:
     return f"ZY520{input_number - 1}"
 
 
+def output_restart_command() -> str:
+    """``ZY554`` — restart the output link so the display renegotiates. Requires CR.
+
+    The output-side counterpart to :func:`input_restart_command`: where that
+    pulses hotplug toward a *source*, this re-establishes the link toward the
+    *display*. Use it when the projector or TV is showing nothing, the wrong
+    resolution, or has lost HDR after a change downstream of the Lumagen — an
+    AVR being power-cycled, a switch relearning, a cable reseated.
+
+    Parameterless, so unlike ``ZY520`` it can't be scoped to one output; it acts
+    on the output path as a whole.
+
+    **Provenance.** Absent from Tip0011 rev 11/20/2023, and no firmware-string
+    evidence has been located for it. It is included because the behaviour was
+    confirmed directly on hardware: sending it drops and re-syncs the output,
+    which is a visible, unambiguous effect rather than an inference. That is a
+    higher standard than an entry in a command list, and the same standard that
+    justifies :func:`fan_speed_command`.
+    """
+    return "ZY554"
+
+
 def show_aspect_command() -> str:
     """``ZY811`` — pop the current input and aspect onto the OSD. Requires CR.
 
-    Reverse-engineered from the firmware's command table rather than taken from
-    Tip0011, which doesn't list it. Harmless if unsupported: an unrecognised
-    ``ZY`` command is ignored, so the failure mode is "no overlay appears".
+    Reverse-engineered from the firmware command table rather than taken from
+    Tip0011, which doesn't list it.
+
+    Behaviour on firmware that lacks it is **unknown**, not assumed-benign: this
+    docstring previously claimed an unrecognised ``ZY`` command is simply
+    ignored, but Tip0011 never says so. The only no-op it documents is the ``_``
+    character. Treat an unsupported firmware as untested rather than safe.
     """
     return "ZY811"
 

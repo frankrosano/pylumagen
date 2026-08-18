@@ -1203,6 +1203,40 @@ async def test_restart_input_writes_with_cr(
     assert fake_transport.sent == [b"ZY5202\r", b"ZY520A\r", b"ZY520A\r"]
 
 
+async def test_restart_outputs_writes_with_cr(
+    fake_transport: FakeTransport, client: LumagenClient
+) -> None:
+    """The CR is what makes this land — bare ZY554 leaves the device waiting.
+
+    Also pins that it takes no argument, so it can't accidentally grow an
+    input-style parameter that the device would read as trailing junk.
+    """
+    await client.start()
+    fake_transport.sent.clear()
+    await client.restart_outputs()
+    assert fake_transport.sent == [b"ZY554\r"]
+
+
+async def test_restart_outputs_does_not_trigger_a_status_refresh(
+    fake_transport: FakeTransport,
+) -> None:
+    """The output re-sync generates its own !I25 push, so polling on top of it
+    would only add traffic during the moment the link is down."""
+    c = LumagenClient(
+        fake_transport,
+        power_poll_interval=10.0,
+        status_poll_interval=10.0,
+        stale_timeout=30.0,
+    )
+    c.REFRESH_TICKS = (0.05,)
+    await c.start()
+    fake_transport.sent.clear()
+    await c.restart_outputs()
+    await asyncio.sleep(0.15)
+    await c.stop()
+    assert fake_transport.sent == [b"ZY554\r"]
+
+
 async def test_show_aspect_and_save_config_write_with_cr(
     fake_transport: FakeTransport, client: LumagenClient
 ) -> None:

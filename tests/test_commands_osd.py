@@ -25,6 +25,7 @@ from aiolumagen.commands import (
     osd_block_char_command,
     osd_clear_command,
     osd_message_command,
+    output_restart_command,
     sanitize_osd_text,
     save_config_command,
     show_aspect_command,
@@ -272,6 +273,26 @@ def test_input_restart_rejects_unknown_strings() -> None:
 
 
 # ---------- Show aspect / save config ----------
+
+
+def test_output_restart_command() -> None:
+    """``ZY554`` — parameterless, so it can't be scoped to one output.
+
+    Confirmed on hardware rather than from a command list: sending it drops and
+    re-syncs the output. Absent from Tip0011 rev 11/20/2023 and no
+    firmware-string evidence located, so the hardware observation is the
+    evidence.
+    """
+    assert output_restart_command() == "ZY554"
+
+
+def test_input_and_output_restart_are_distinct_commands() -> None:
+    """One pulses hotplug toward a source, the other renegotiates the display.
+
+    They sit next to each other in the ZY5xx range and read similarly, so pin
+    that they don't collapse into the same string.
+    """
+    assert output_restart_command() != input_restart_command("all")
 
 
 def test_show_aspect_command() -> None:

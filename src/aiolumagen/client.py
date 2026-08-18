@@ -43,6 +43,7 @@ from aiolumagen.commands import (
     osd_block_char_command,
     osd_clear_command,
     osd_message_command,
+    output_restart_command,
     reset_auto_aspect_command,
     save_config_command,
     sharpness_command,
@@ -728,12 +729,28 @@ class LumagenClient:
         """
         await self.send_command(input_restart_command(input_number), cr=True, refresh=False)
 
+    async def restart_outputs(self) -> None:
+        """Restart the output link via ``ZY554`` so the display renegotiates.
+
+        The output-side counterpart to :meth:`restart_input`. Reach for this
+        when the display shows nothing, the wrong resolution, or has lost HDR
+        after something downstream of the Lumagen changed — an AVR
+        power-cycled, a switch relearning, a cable reseated.
+
+        Expect the picture to drop and re-sync; that's the mechanism working,
+        and it's also how the command was confirmed (see
+        :func:`~aiolumagen.commands.output_restart_command` for provenance).
+        Parameterless, so it acts on the output path as a whole rather than one
+        output.
+        """
+        await self.send_command(output_restart_command(), cr=True, refresh=False)
+
     async def show_aspect(self) -> None:
         """``ZY811`` — pop the current input and aspect onto the OSD.
 
-        Reverse-engineered rather than documented in Tip0011. Fails soft: an
-        unrecognised ``ZY`` command is ignored, so on firmware without it
-        nothing appears and nothing breaks.
+        Reverse-engineered rather than documented in Tip0011. Behaviour on
+        firmware lacking it is untested rather than known-harmless — see
+        :func:`~aiolumagen.commands.show_aspect_command`.
         """
         await self.send_command(show_aspect_command(), cr=True, refresh=False)
 
