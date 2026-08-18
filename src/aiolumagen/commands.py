@@ -194,6 +194,10 @@ class Query(StrEnum):
     SOURCE_HDR_STATUS = "ZQI52"
     GAME_MODE = "ZQI53"
     AUTO_ASPECT = "ZQI54"
+    # The only query that reports output width outright. Everything else forces
+    # width to be inferred from height x aspect, which is wrong for a scaled
+    # output — see LumagenState.output_width.
+    OUTPUT_MODE = "ZQO01"
 
 
 # Echo mode — sent once at startup to reduce command echoing and enable

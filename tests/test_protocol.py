@@ -787,3 +787,95 @@ def test_reset_keeps_response_observers() -> None:
     proto.reset()
     proto.feed_bytes(b"!S02,1\r\n")
     assert seen == ["S02"]
+
+
+# --- !O01 output mode / authoritative output width -------------------------
+#
+# Payloads below are real captures from a Radiance Pro 4242 on firmware 030326,
+# feeding a JVC projector at 4096x2160 through an anamorphic lens. That setup is
+# what exposed the bug these tests pin: the output aspect is the *image* aspect
+# (2.37), not the raster aspect, so deriving width from it is unsound.
+
+
+def test_o01_reports_authoritative_output_width() -> None:
+    """!O01 field 1 is the real output width and must land in state."""
+    updates, proto = _collect()
+    proto.feed_bytes(b"!O01,5994,4096,2160,0,0\r\n")
+    state = updates[-1][0]
+    assert state.output_width_reported == 4096
+    assert state.output_height_reported == 2160
+    assert state.output_width == 4096
+    assert state.output_mode_raw == "5994,4096,2160,0,0"
+
+
+def test_o01_width_overrides_aspect_derived_width() -> None:
+    """The anamorphic regression: 2160 x 2.37 = 5119, but the output is 4096.
+
+    !I25 arrives first and can only infer width from the output aspect, which
+    for a scaled output is the image aspect rather than the raster. !O01 then
+    supplies the truth and must win — and must keep winning when the next status
+    push re-runs the derivation.
+    """
+    updates, proto = _collect()
+
+    # Full v5 push: output height 2160 (idx 13), output aspect 237 (idx 14).
+    i25 = b"!I25,1,059,2160,0,0,178,178,-,0,000e,0,0,059,2160,237,2,0,p,P,01,01,178,178,A,1,0,2\r\n"
+    proto.feed_bytes(i25)
+    derived = updates[-1][0].output_width
+    assert derived == 5119, "aspect-derived width should be the wrong 5119 here"
+
+    # !O01 corrects it.
+    proto.feed_bytes(b"!O01,5994,4096,2160,0,0\r\n")
+    assert updates[-1][0].output_width == 4096
+
+    # A later status push must NOT reintroduce the derived value.
+    proto.feed_bytes(i25)
+    assert updates[-1][0].output_width == 4096
+    assert updates[-1][0].output_width_reported == 4096
+
+
+def test_o01_falls_back_to_derivation_when_unseen() -> None:
+    """Without !O01 the aspect-derived width is still better than nothing."""
+    updates, proto = _collect()
+    proto.feed_bytes(
+        b"!I25,1,059,2160,0,0,178,178,-,0,000e,0,0,059,2160,178,2,0,p,P,01,01,178,178,A,1,0,2\r\n"
+    )
+    state = updates[-1][0]
+    assert state.output_width_reported is None
+    # 2160 x 1.78 = 3844.8, snapped to the standard 3840.
+    assert state.output_width == 3840
+
+
+def test_o01_zero_geometry_is_treated_as_no_signal() -> None:
+    """A 0 width/height is the device's placeholder, not a real raster."""
+    updates, proto = _collect()
+    proto.feed_bytes(b"!O01,0,0,0,0,0\r\n")
+    state = updates[-1][0]
+    assert state.output_width_reported is None
+    assert state.output_height_reported is None
+
+
+def test_o01_short_or_malformed_payload_does_not_raise() -> None:
+    """Truncated and non-numeric payloads leave the fields unset."""
+    for payload in (b"!O01\r\n", b"!O01,5994\r\n", b"!O01,5994,abc,def,0,0\r\n"):
+        updates, proto = _collect()
+        proto.feed_bytes(payload)
+        state = updates[-1][0] if updates else LumagenState()
+        assert state.output_width_reported is None
+
+
+def test_o01_does_not_touch_rate_fields() -> None:
+    """!O01 carries a rate too, but ownership stays with the !I25 push.
+
+    Two writers for one value is how precedence bugs start; O01's rate encoding
+    (5994) differs from the push's (059) and nothing needs it.
+    """
+    updates, proto = _collect()
+    proto.feed_bytes(
+        b"!I25,1,059,2160,0,0,178,178,-,0,000e,0,0,059,2160,237,2,0,p,P,01,01,178,178,A,1,0,2\r\n"
+    )
+    before = updates[-1][0]
+    proto.feed_bytes(b"!O01,2398,4096,2160,0,0\r\n")
+    after = updates[-1][0]
+    assert after.output_vrate == before.output_vrate
+    assert after.output_refresh_hz == before.output_refresh_hz

@@ -274,8 +274,30 @@ class LumagenState:
     :attr:`source_aspect`. The Lumagen never reports width directly."""
 
     output_width: int | None = None
-    """Output display width derived from :attr:`output_resolution` and
-    :attr:`output_aspect`."""
+    """Output display width — best available value.
+
+    Sourced from :attr:`output_width_reported` when ``!O01`` has been seen,
+    otherwise derived from :attr:`output_resolution` and :attr:`output_aspect`.
+
+    Prefer the reported value because the derivation is only valid when the
+    aspect field describes the *raster*. For the source it does (index 5 is
+    documented as source raster aspect), but the output aspect is the aspect
+    of the image being produced, which need not match the raster: a 4096x2160
+    output feeding an anamorphic lens reports an output aspect of 2.37, and
+    ``2160 x 2.37`` gives 5119 rather than 4096. That is not an imprecision to
+    be snapped away — it is the wrong input."""
+    output_width_reported: int | None = None
+    """Output width as the device itself reports it, from ``!O01`` field 1.
+
+    Authoritative, unlike the aspect-derived fallback. ``None`` until ``!O01``
+    has been seen — which requires :meth:`~aiolumagen.client.LumagenClient
+    .query_output_mode` to have run, since the field never rides the ``!I25``
+    push stream."""
+    output_height_reported: int | None = None
+    """Output vertical resolution from ``!O01`` field 2.
+
+    Kept for cross-checking against :attr:`output_resolution`, which carries
+    the same number via the status push."""
 
     # --- Full v5 trailing fields, empirically mapped ---
     subtitle_shift: SubtitleShift | None = None

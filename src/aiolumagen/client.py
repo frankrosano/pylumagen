@@ -548,13 +548,32 @@ class LumagenClient:
         """
         await self.send_command(Query.SOURCE_HDR_STATUS.value)
 
+    async def query_output_mode(self) -> None:
+        """Send ``ZQO01`` and update the output geometry fields.
+
+        The only query that reports output width outright, landing in
+        :attr:`state.output_width_reported` and from there
+        :attr:`state.output_width`. Without it, width is inferred from height
+        and the output aspect, which is wrong whenever the output is scaled —
+        an anamorphic setup reports 5119 for a 4096-wide raster.
+
+        ``!O01`` does not ride the ``!I25`` push stream, so this has to be
+        polled; it runs from :meth:`_query_secondary_status`.
+        """
+        await self.send_command(Query.OUTPUT_MODE.value)
+
     async def _query_secondary_status(self) -> None:
         """Query the state the Full v5 push stream doesn't carry.
 
         Sharpness (``!I30``), game mode (``!I53``), auto aspect (``!I54``),
-        display Rec.2020 support (``!I50``) and source HDR mastering
-        metadata (``!I52``) are only emitted in response to their explicit
-        ``ZQ`` queries — none of them ride in the ``!I25`` status push.
+        display Rec.2020 support (``!I50``), source HDR mastering
+        metadata (``!I52``) and output mode (``!O01``) are only emitted in
+        response to their explicit ``ZQ`` queries — none of them ride in the
+        ``!I25`` status push.
+
+        ``!O01`` is here because it carries the only authoritative output width;
+        the status push offers height and an aspect code, from which width can
+        only be inferred, and that inference breaks on a scaled output.
 
         One partial exception, which is why this list still includes auto
         aspect: a *tri-state* auto-aspect field appears to ride the push at
@@ -583,6 +602,7 @@ class LumagenClient:
             await self.query_auto_aspect()
             await self.query_display_rec2020()
             await self.query_source_hdr_status()
+            await self.query_output_mode()
         except LumagenConnectionError as err:
             _LOGGER.debug("Secondary status query failed (transport down): %s", err)
 

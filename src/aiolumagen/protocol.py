@@ -399,7 +399,7 @@ class LumagenProtocol:
         elif code == "I54":
             pending.auto_aspect = data[:1] == "1"
         elif code == "O01":
-            pending.output_mode_raw = data
+            self._handle_o01(data, pending)
         else:
             _LOGGER.debug("Unhandled Lumagen code !%s,%s", code, data)
             applied = False
@@ -658,6 +658,44 @@ class LumagenProtocol:
             state.detected_content_aspect = fields[_I24_DETECTED_CONTENT_ASPECT]
 
     @staticmethod
+    def _handle_o01(data: str, state: LumagenState) -> None:
+        """!O01 = output mode. The only source of true output width.
+
+        Tip0011 (``ZQO01``) documents the payload as ``vertical rate * 100,
+        horizontal res, vertical res, interlaced, 3D mode``, with the example
+        ``!O01,5994,1920,1080,0,0``.
+
+        Field 1 matters because it is the **only** place the Lumagen states its
+        output width outright. Everywhere else width has to be inferred from
+        height and an aspect code, and for the output that inference is
+        unsound — see
+        :attr:`~aiolumagen.state.LumagenState.output_width` for why an
+        anamorphic setup turns 4096 into 5119.
+
+        Deliberately does not touch the rate or 3D fields. ``output_vrate`` /
+        ``output_refresh_hz`` already come off the ``!I25`` push in a different
+        encoding (``059`` vs ``5994``), and two writers for one value invites
+        exactly the precedence bug this method exists to fix. The raw payload is
+        always stashed so a diagnostic dump can show the wire bytes.
+        """
+        state.output_mode_raw = data
+        fields = data.split(",")
+
+        def numeric(index: int) -> int | None:
+            if len(fields) <= index:
+                return None
+            try:
+                value = int(fields[index].strip())
+            except ValueError:
+                return None
+            # 0 is the device's no-signal placeholder, not a real geometry.
+            return value if value > 0 else None
+
+        state.output_width_reported = numeric(1)
+        state.output_height_reported = numeric(2)
+        LumagenProtocol._apply_derived(state)
+
+    @staticmethod
     def _apply_derived(state: LumagenState) -> None:
         """Decode the raw code fields into usable numbers.
 
@@ -674,7 +712,16 @@ class LumagenProtocol:
             state.source_width = derive_horizontal_resolution(
                 state.source_resolution, state.source_aspect
             )
-        if state.output_resolution is not None and state.output_aspect is not None:
+        # Output width: prefer what the device reported over what we can infer.
+        # The derivation multiplies height by the *output aspect*, which is only
+        # the raster aspect when the output is unscaled. Feeding an anamorphic
+        # lens breaks that assumption — a 4096x2160 raster reports aspect 2.37,
+        # and 2160 x 2.37 = 5119. !O01 carries the real width, so once it has
+        # been seen it wins; the derivation stays as the fallback for a device
+        # that has not answered ZQO01 yet.
+        if state.output_width_reported is not None:
+            state.output_width = state.output_width_reported
+        elif state.output_resolution is not None and state.output_aspect is not None:
             state.output_width = derive_horizontal_resolution(
                 state.output_resolution, state.output_aspect
             )

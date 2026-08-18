@@ -49,10 +49,15 @@ async def test_startup_queries_non_pushed_secondary_state(
     display Rec.2020 (ZQI50) and source HDR (ZQI52) were never queried, so
     their entities sat at "unknown" forever and set_sharpness couldn't
     preserve enabled/level.
+
+    ZQO01 joined the list later for the same class of reason: the !O01 parser
+    existed but nothing ever sent the query, so the only authoritative output
+    width never arrived and output_width fell back to an aspect-derived value
+    that is wrong on a scaled output.
     """
     await client.start()
     sent = b"".join(fake_transport.sent)
-    for query in (b"ZQI30", b"ZQI53", b"ZQI54", b"ZQI50", b"ZQI52"):
+    for query in (b"ZQI30", b"ZQI53", b"ZQI54", b"ZQI50", b"ZQI52", b"ZQO01"):
         assert query in sent, f"{query!r} not issued at startup: {fake_transport.sent}"
 
 
